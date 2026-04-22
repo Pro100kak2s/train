@@ -10,7 +10,7 @@ class AccountError(Exception):
 
 
 class AccountFrozenError(AccountError):
-    """❄ Счет заморожен"""
+    """ Счет заморожен"""
     pass
 
 
@@ -168,24 +168,24 @@ def run_demo():
     print("\n=== ДЕМОНСТРАЦИЯ ===\n")
 
     #  активный счет
-    print("1️⃣ Активный счет")
+    print("Активный счет")
     active = BankAccount("Timofey", Currency.USD)
     print(active)
 
     #  операции
-    print("\n2️⃣ Пополнение и снятие")
+    print("\n⃣ Пополнение и снятие")
     active.deposit(1000)
     active.withdraw(200)
     print(active)
 
     #  замороженный счет
-    print("\n3️⃣ Замороженный счет")
+    print("\n Замороженный счет")
     frozen = BankAccount("Alex", Currency.EUR)
     frozen.freeze()
     print(frozen)
 
     #  операции на замороженном
-    print("\n4️⃣ Попытки операций")
+    print("\n⃣ Попытки операций")
     try:
         frozen.deposit(100)
     except AccountFrozenError as e:
@@ -197,7 +197,7 @@ def run_demo():
         print("Ожидаемая ошибка:", e)
 
     #  недостаточно средств
-    print("\n5️⃣ Недостаточно средств")
+    print("\n Недостаточно средств")
     try:
         active.withdraw(10000)
     except InsufficientFundsError as e:
