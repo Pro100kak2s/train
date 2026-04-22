@@ -2,9 +2,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import uuid
 
-# =========================================================
-#  3. ИСКЛЮЧЕНИЯ
-# =========================================================
+#  ИСКЛЮЧЕНИЯ
 
 class AccountError(Exception):
     """Базовая ошибка для всех операций со счетом"""
@@ -30,16 +28,11 @@ class InsufficientFundsError(AccountError):
     """ Недостаточно средств"""
     pass
 
-
-# =========================================================
 #  ENUMЫ
-# =========================================================
-
 class AccountStatus(Enum):
     ACTIVE = "active"
     FROZEN = "frozen"
     CLOSED = "closed"
-
 
 class Currency(Enum):
     RUB = "RUB"
@@ -49,29 +42,20 @@ class Currency(Enum):
     CNY = "CNY"
 
 
-# =========================================================
-#  1. АБСТРАКТНЫЙ КЛАСС
-# =========================================================
+#  АБСТРАКТНЫЙ КЛАСС
 
 class AbstractAccount(ABC):
     def __init__(self, owner: str, account_id: str = None):
-        #  Валидация владельца
         if not owner or not owner.strip():
             raise InvalidOperationError("Владелец не может быть пустым")
 
-        #  Генерация короткого UUID (8 символов)
+        # 🆔 короткий UUID
         self._id = account_id if account_id else str(uuid.uuid4())[:8]
 
-        #  Владелец
         self._owner = owner
-
-        #  Баланс (инкапсуляция)
         self._balance = 0.0
-
-        #  Статус
         self._status = AccountStatus.ACTIVE
 
-    #  Абстрактные методы
     @abstractmethod
     def deposit(self, amount: float):
         pass
@@ -84,7 +68,6 @@ class AbstractAccount(ABC):
     def get_account_info(self):
         pass
 
-    #  Общие геттеры
     def get_balance(self):
         return self._balance
 
@@ -95,16 +78,13 @@ class AbstractAccount(ABC):
         return self._id
 
 
-# =========================================================
-#  2. КОНКРЕТНЫЙ СЧЕТ
-# =========================================================
+#  КОНКРЕТНЫЙ СЧЕТ
 
 class BankAccount(AbstractAccount):
 
     def __init__(self, owner: str, currency: Currency, account_id: str = None):
         super().__init__(owner, account_id)
 
-        #  Валидация валюты
         if not isinstance(currency, Currency):
             raise InvalidOperationError("Неверная валюта")
 
@@ -118,27 +98,28 @@ class BankAccount(AbstractAccount):
         if self._status == AccountStatus.CLOSED:
             raise AccountClosedError("Операции запрещены: счет закрыт")
 
-    #  Пополнение
-    def deposit(self, amount: float):
-        self._ensure_active()
-
+    #  Валидация суммы
+    def _validate_amount(self, amount):
         if not isinstance(amount, (int, float)):
             raise InvalidOperationError("Сумма должна быть числом")
 
+        if amount != amount or amount in (float("inf"), float("-inf")):
+            raise InvalidOperationError("Некорректное число")
+
         if amount <= 0:
             raise InvalidOperationError("Сумма должна быть больше 0")
+
+    # Пополнение
+    def deposit(self, amount: float):
+        self._ensure_active()
+        self._validate_amount(amount)
 
         self._balance += amount
 
     #  Снятие
     def withdraw(self, amount: float):
         self._ensure_active()
-
-        if not isinstance(amount, (int, float)):
-            raise InvalidOperationError("Сумма должна быть числом")
-
-        if amount <= 0:
-            raise InvalidOperationError("Сумма должна быть больше 0")
+        self._validate_amount(amount)
 
         if amount > self._balance:
             raise InsufficientFundsError("Недостаточно средств")
@@ -155,7 +136,22 @@ class BankAccount(AbstractAccount):
             "status": self._status.value
         }
 
-    #  Управление счетом
+    #  Строковое представление
+    def __str__(self):
+        account_type = self.__class__.__name__
+        last_digits = self._id[-4:]
+        status = self._status.value
+        balance = f"{round(self._balance, 2)} {self._currency.value}"
+
+        return (
+            f"{account_type} | "
+            f"Клиент: {self._owner} | "
+            f"Счет: ****{last_digits} | "
+            f"Статус: {status} | "
+            f"Баланс: {balance}"
+        )
+
+    #  Управление
     def freeze(self):
         if self._status == AccountStatus.CLOSED:
             raise AccountClosedError("Закрытый счет нельзя заморозить")
@@ -166,18 +162,50 @@ class BankAccount(AbstractAccount):
         self._status = AccountStatus.CLOSED
 
 
+#  ДЕМОНСТРАЦИЯ
 
-if __name__ == "__main__":
-    acc = BankAccount("Timofey", Currency.USD)
+def run_demo():
+    print("\n=== ДЕМОНСТРАЦИЯ ===\n")
+
+    #  активный счет
+    print("1️⃣ Активный счет")
+    active = BankAccount("Timofey", Currency.USD)
+    print(active)
+
+    #  операции
+    print("\n2️⃣ Пополнение и снятие")
+    active.deposit(1000)
+    active.withdraw(200)
+    print(active)
+
+    #  замороженный счет
+    print("\n3️⃣ Замороженный счет")
+    frozen = BankAccount("Alex", Currency.EUR)
+    frozen.freeze()
+    print(frozen)
+
+    #  операции на замороженном
+    print("\n4️⃣ Попытки операций")
+    try:
+        frozen.deposit(100)
+    except AccountFrozenError as e:
+        print("Ожидаемая ошибка:", e)
 
     try:
-        acc.deposit(1000)
-        acc.withdraw(200)
+        frozen.withdraw(50)
+    except AccountFrozenError as e:
+        print("Ожидаемая ошибка:", e)
 
-        print(acc.get_account_info())
+    #  недостаточно средств
+    print("\n5️⃣ Недостаточно средств")
+    try:
+        active.withdraw(10000)
+    except InsufficientFundsError as e:
+        print("Ожидаемая ошибка:", e)
 
-        acc.freeze()
-        acc.withdraw(100)  # вызовет AccountFrozenError
+    print("\n=== ГОТОВО ===\n")
 
-    except AccountError as e:
-        print(f"Ошибка: {e}")
+
+# запуск
+if __name__ == "__main__":
+    run_demo()
