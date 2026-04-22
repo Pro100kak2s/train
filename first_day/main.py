@@ -49,7 +49,7 @@ class AbstractAccount(ABC):
         if not owner or not owner.strip():
             raise InvalidOperationError("Владелец не может быть пустым")
 
-        # 🆔 короткий UUID
+        #  короткий UUID
         self._id = account_id if account_id else str(uuid.uuid4())[:8]
 
         self._owner = owner
