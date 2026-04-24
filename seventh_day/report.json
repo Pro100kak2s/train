@@ -1,0 +1,16 @@
+[
+    {
+        "id": "90a12158",
+        "owner": "Timofey",
+        "balance": 800.0,
+        "currency": "USD",
+        "status": "active"
+    },
+    {
+        "id": "3bac825f",
+        "owner": "Alex",
+        "balance": 500.0,
+        "currency": "EUR",
+        "status": "active"
+    }
+]
