@@ -1,3 +1,6 @@
+from first_day.main import Currency, InsufficientFundsError, BankAccount, InvalidOperationError
+
+
 class SavingsAccount(BankAccount):
     def __init__(self, owner, currency, min_balance, interest_rate, account_id=None):
         super().__init__(owner, currency, account_id)
@@ -35,7 +38,6 @@ class SavingsAccount(BankAccount):
 class PremiumAccount(BankAccount):
     def __init__(self, owner, currency, overdraft_limit, fee, account_id=None):
         super().__init__(owner, currency, account_id)
-
         self._overdraft_limit = overdraft_limit
         self._fee = fee
 
@@ -43,10 +45,12 @@ class PremiumAccount(BankAccount):
         self._ensure_active()
         self._validate_amount(amount)
 
-        if self._balance - amount < -self._overdraft_limit:
+        total = amount + self._fee
+
+        if self._balance - total < -self._overdraft_limit:
             raise InsufficientFundsError("Превышен лимит овердрафта")
 
-        self._balance -= (amount + self._fee)
+        self._balance -= total
 
     def get_account_info(self):
         base = super().get_account_info()
