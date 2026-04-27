@@ -1,13 +1,13 @@
 import datetime
 
-from first_day.main import (
+from oop.first_day.main import (
     AccountFrozenError,
     InvalidOperationError,
     AccountStatus,
     Currency,
     BankAccount
 )
-from second_day.main import PremiumAccount
+from oop.second_day.main import PremiumAccount
 
 
 # =========================================================

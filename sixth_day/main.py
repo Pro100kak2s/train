@@ -1,27 +1,28 @@
 import random
 
-from third_day.main import Bank, Client
-from fourth_day.main import (
+from oop.third_day.main import Bank, Client
+from oop.fourth_day.main import (
     Transaction,
     TransactionType,
     TransactionQueue,
     TransactionProcessor,
     TransactionStatus
 )
-from fifth_day.main import (
+from oop.fifth_day.main import (
     AuditLog,
     RiskAnalyzer,
     SecureTransactionProcessor,
-    LogLevel
+    LogLevel,
+    AuditReport
 )
 
-from first_day.main import Currency, BankAccount
-from second_day.main import PremiumAccount
+from oop.first_day.main import Currency, BankAccount
+from oop.second_day.main import PremiumAccount
 
 
-# =========================
+# =========================================================
 # СОЗДАНИЕ СИСТЕМЫ
-# =========================
+# =========================================================
 
 def create_system():
     bank = Bank()
@@ -29,62 +30,117 @@ def create_system():
     clients = []
     accounts = []
 
-    # создаем клиентов
+    print("\n=== CREATE CLIENTS ===")
+
+    # 5 клиентов
     for i in range(5):
         client = Client(f"Client_{i}", str(i), 25 + i, "contact")
         bank.add_client(client)
         clients.append(client)
 
-    # создаем счета
+        print(f"Created client: {client.full_name}")
+
+    print("\n=== CREATE ACCOUNTS ===")
+
+    # 2-3 счета на клиента
     for client in clients:
         for _ in range(random.randint(2, 3)):
+
             if random.random() > 0.5:
                 acc = BankAccount(client.full_name, Currency.USD)
             else:
                 acc = PremiumAccount(client.full_name, Currency.USD, 500, 5)
 
+            # начальный баланс
             acc.deposit(random.randint(500, 3000))
 
             bank.open_account(client.client_id, acc)
             accounts.append(acc)
 
+            print("Account:", acc)
+
     return bank, clients, accounts
 
 
-# =========================
+# =========================================================
 # СИМУЛЯЦИЯ ТРАНЗАКЦИЙ
-# =========================
+# =========================================================
 
 def simulate_transactions(accounts):
-    queue = TransactionQueue()
-    base_processor = TransactionProcessor()
 
+    queue = TransactionQueue()
+
+    base_processor = TransactionProcessor()
     audit = AuditLog()
     risk = RiskAnalyzer()
 
     processor = SecureTransactionProcessor(base_processor, audit, risk)
 
-    # создаем 40 транзакций
-    for _ in range(40):
+    print("\n=== ADD TRANSACTIONS TO QUEUE ===")
+
+    # =====================================================
+    # 1. НОРМАЛЬНЫЕ
+    # =====================================================
+    for _ in range(20):
         sender = random.choice(accounts)
         receiver = random.choice(accounts)
 
-        amount = random.randint(50, 3000)
-
-        t = Transaction(
+        tx = Transaction(
             TransactionType.TRANSFER,
-            amount=amount,
+            amount=random.randint(50, 500),
             currency=Currency.USD,
             sender=sender,
             receiver=receiver,
-            fee=random.randint(1, 5)
+            fee=2
         )
 
-        queue.add(t, priority=random.randint(0, 3))
+        queue.add(tx, priority=random.randint(0, 2))
+        print("QUEUE NORMAL:", tx)
 
-        print("QUEUE:", t)
+    # =====================================================
+    # 2. ОШИБОЧНЫЕ (недостаточно средств)
+    # =====================================================
+    for _ in range(10):
+        sender = random.choice(accounts)
+        receiver = random.choice(accounts)
 
-    # обработка
+        tx = Transaction(
+            TransactionType.TRANSFER,
+            amount=999999,  # точно ошибка
+            currency=Currency.USD,
+            sender=sender,
+            receiver=receiver,
+            fee=5
+        )
+
+        queue.add(tx)
+        print("QUEUE ERROR:", tx)
+
+    # =====================================================
+    # 3. ПОДОЗРИТЕЛЬНЫЕ (большие суммы)
+    # =====================================================
+    for _ in range(10):
+        sender = random.choice(accounts)
+        receiver = random.choice(accounts)
+
+        tx = Transaction(
+            TransactionType.TRANSFER,
+            amount=3000,  # риск
+            currency=Currency.USD,
+            sender=sender,
+            receiver=receiver,
+            fee=3
+        )
+
+        queue.add(tx)
+        print("QUEUE RISK:", tx)
+
+    # =====================================================
+    # ОБРАБОТКА
+    # =====================================================
+
+    print("\n=== PROCESSING ===")
+
     results = []
 
     while True:
@@ -102,52 +158,22 @@ def simulate_transactions(accounts):
         queue.remove(item)
         results.append(tx)
 
-        print("PROCESSED:", tx)
+        if tx.status == TransactionStatus.BLOCKED:
+            print("BLOCKED:", tx)
+        elif tx.status == TransactionStatus.FAILED:
+            print("FAILED:", tx)
+        else:
+            print("SUCCESS:", tx)
 
     return results, audit
 
-# =========================
-# ОТЧЁТЫ
-# =========================
 
-def show_reports(bank, clients, results, audit):
-    print("\n=== REPORTS ===\n")
-
-    # топ клиенты
-    ranking = bank.get_clients_ranking()
-    print("TOP 3 CLIENTS:")
-    for r in ranking[:3]:
-        print(r)
-
-    # статистика транзакций
-    success = len([t for t in results if t.status == TransactionStatus.SUCCESS])
-    failed = len([t for t in results if t.status == TransactionStatus.FAILED])
-    blocked = len([t for t in results if t.status == TransactionStatus.BLOCKED])
-
-    print("\nTRANSACTION STATS:")
-    print("SUCCESS:", success)
-    print("FAILED:", failed)
-    print("BLOCKED:", blocked)
-
-    # общий баланс
-    total = 0
-    for client in clients:
-        total += bank.get_total_balance(client.client_id)
-
-    print("\nTOTAL BANK BALANCE:", total)
-
-    # подозрительные операции
-    print("\nSUSPICIOUS OPERATIONS:")
-    for log in audit.filter(LogLevel.ERROR):
-        print(log)
-
-
-# =========================
-# СЦЕНАРИИ ПОЛЬЗОВАТЕЛЯ
-# =========================
+# =========================================================
+# USER СЦЕНАРИИ
+# =========================================================
 
 def user_scenarios(bank, clients):
-    print("\n=== USER SCENARIOS ===\n")
+    print("\n=== USER SCENARIOS ===")
 
     client = random.choice(clients)
 
@@ -155,19 +181,71 @@ def user_scenarios(bank, clients):
 
     accounts = bank.search_accounts(client.client_id)
 
-    print("ACCOUNTS:")
+    print("\nACCOUNTS:")
     for acc in accounts:
         print(acc)
 
-    print("TOTAL BALANCE:", bank.get_total_balance(client.client_id))
+    print("\nTOTAL BALANCE:", bank.get_total_balance(client.client_id))
 
 
-# =========================
+# =========================================================
+# ОТЧЁТЫ
+# =========================================================
+
+def show_reports(bank, clients, results, audit):
+
+    print("\n=== REPORTS ===")
+
+    # =========================
+    # ТОП КЛИЕНТОВ
+    # =========================
+    print("\nTOP 3 CLIENTS:")
+    ranking = bank.get_clients_ranking()
+
+    for name, balance in ranking[:3]:
+        print(name, "->", balance)
+
+    # =========================
+    # СТАТИСТИКА ТРАНЗАКЦИЙ
+    # =========================
+    success = len([t for t in results if t.status == TransactionStatus.SUCCESS])
+    failed = len([t for t in results if t.status == TransactionStatus.FAILED])
+    blocked = len([t for t in results if t.status == TransactionStatus.BLOCKED])
+
+    print("\nTRANSACTIONS:")
+    print("SUCCESS:", success)
+    print("FAILED:", failed)
+    print("BLOCKED:", blocked)
+
+    # =========================
+    # ОБЩИЙ БАЛАНС
+    # =========================
+    total = sum(bank.get_total_balance(c.client_id) for c in clients)
+
+    print("\nTOTAL BANK BALANCE:", total)
+
+    # =========================
+    # ПОДОЗРИТЕЛЬНЫЕ
+    # =========================
+    print("\nSUSPICIOUS OPERATIONS:")
+
+    for log in audit.filter(LogLevel.ERROR):
+        print(log)
+
+    # =========================
+    # AUDIT REPORT
+    # =========================
+    report = AuditReport(audit)
+
+    print("\nAUDIT STATS:", report.stats())
+
+
+# =========================================================
 # MAIN
-# =========================
+# =========================================================
 
 def run_day6_demo():
-    print("\n=== DAY 6 DEMO ===\n")
+    print("\n========== DAY 6 ==========\n")
 
     bank, clients, accounts = create_system()
 
@@ -177,6 +255,8 @@ def run_day6_demo():
 
     show_reports(bank, clients, results, audit)
 
+
+# ЗАПУСК
 
 if __name__ == "__main__":
     run_day6_demo()

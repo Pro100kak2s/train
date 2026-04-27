@@ -1,4 +1,4 @@
-from first_day.main import Currency, InsufficientFundsError, BankAccount, InvalidOperationError
+from oop.first_day.main import Currency, InsufficientFundsError, BankAccount, InvalidOperationError
 
 
 class SavingsAccount(BankAccount):

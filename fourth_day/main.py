@@ -1,9 +1,17 @@
+# oop/fourth_day/main.py
+
 from enum import Enum
 import uuid
 import time
 
-from first_day.main import Currency, BankAccount, InsufficientFundsError, AccountFrozenError, AccountStatus
-from second_day.main import PremiumAccount
+from oop.first_day.main import (
+    Currency,
+    BankAccount,
+    InsufficientFundsError,
+    AccountFrozenError,
+    AccountStatus
+)
+from oop.second_day.main import PremiumAccount
 
 
 # =========================
@@ -15,6 +23,7 @@ class TransactionStatus(Enum):
     SUCCESS = "success"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    BLOCKED = "blocked"
 
 
 class TransactionType(Enum):
@@ -24,7 +33,7 @@ class TransactionType(Enum):
 
 
 # =========================
-# КОНВЕРТАЦИЯ
+# КОНВЕРТЕР ВАЛЮТ
 # =========================
 
 class CurrencyConverter:
@@ -37,8 +46,7 @@ class CurrencyConverter:
     @staticmethod
     def convert(amount, from_currency, to_currency):
         rate = CurrencyConverter.RATES.get(
-            (from_currency.value, to_currency.value),
-            1
+            (from_currency.value, to_currency.value), 1
         )
         return amount * rate
 
@@ -48,6 +56,7 @@ class CurrencyConverter:
 # =========================
 
 class Transaction:
+
     def __init__(self, t_type, amount, currency, sender=None, receiver=None, fee=0):
         self.id = str(uuid.uuid4())[:8]
 
@@ -69,14 +78,19 @@ class Transaction:
         self.processed_at = None
 
     def __str__(self):
-        return f"{self.type.value} | {round(self.amount, 2)} {self.currency.value} | {self.status.value}"
+        return (
+            f"{self.type.value} | "
+            f"{round(self.amount, 2)} {self.currency.value} | "
+            f"{self.status.value}"
+        )
 
 
 # =========================
-# QUEUE
+# ОЧЕРЕДЬ
 # =========================
 
 class TransactionQueue:
+
     def __init__(self):
         self.queue = []
 
@@ -93,7 +107,7 @@ class TransactionQueue:
         for item in self.queue:
             if item["transaction"].id == transaction_id:
                 item["transaction"].status = TransactionStatus.CANCELLED
-                self.queue.remove(item)  # FIX
+                self.queue.remove(item)
                 return True
         return False
 
@@ -106,7 +120,7 @@ class TransactionQueue:
             tx = item["transaction"]
 
             if tx.status == TransactionStatus.CANCELLED:
-                continue  # FIX
+                continue
 
             if item["execute_at"] <= now:
                 return item
@@ -118,10 +132,11 @@ class TransactionQueue:
 
 
 # =========================
-# PROCESSOR
+# ПРОЦЕССОР
 # =========================
 
 class TransactionProcessor:
+
     def __init__(self):
         self.log = []
 
@@ -129,34 +144,36 @@ class TransactionProcessor:
         try:
             transaction.attempts += 1
 
-            # статус счетов
+            # Проверка статуса
             if transaction.sender and transaction.sender.get_status() != AccountStatus.ACTIVE:
                 raise AccountFrozenError("Счет отправителя недоступен")
 
             if transaction.receiver and transaction.receiver.get_status() != AccountStatus.ACTIVE:
                 raise AccountFrozenError("Счет получателя недоступен")
 
-            total = transaction.amount + transaction.fee
+            total_amount = transaction.amount + transaction.fee
 
-            # проверка средств
+            # Проверка средств
             if transaction.sender:
                 if not isinstance(transaction.sender, PremiumAccount):
-                    if transaction.sender.get_balance() < total:
+                    if transaction.sender.get_balance() < total_amount:
                         raise InsufficientFundsError("Недостаточно средств")
 
-            # конвертация
+            # Конвертация
+            converted_amount = transaction.amount
+
             if transaction.sender and transaction.receiver:
                 if transaction.sender._currency != transaction.receiver._currency:
-                    transaction.amount = CurrencyConverter.convert(
+                    converted_amount = CurrencyConverter.convert(
                         transaction.amount,
                         transaction.sender._currency,
                         transaction.receiver._currency
                     )
 
-            # выполнение
+            # Выполнение
             if transaction.type == TransactionType.TRANSFER:
-                transaction.sender.withdraw(total)
-                transaction.receiver.deposit(transaction.amount)
+                transaction.sender.withdraw(total_amount)
+                transaction.receiver.deposit(converted_amount)
 
             elif transaction.type == TransactionType.DEPOSIT:
                 transaction.receiver.deposit(transaction.amount)
@@ -168,7 +185,7 @@ class TransactionProcessor:
 
         except Exception as e:
             if transaction.attempts < transaction.max_attempts:
-                transaction.status = TransactionStatus.PENDING  # retry
+                transaction.status = TransactionStatus.PENDING
             else:
                 transaction.status = TransactionStatus.FAILED
                 transaction.error = str(e)
@@ -187,66 +204,32 @@ def run_day4_demo():
 
     acc1 = BankAccount("Timofey", Currency.USD)
     acc2 = PremiumAccount("Alex", Currency.USD, 500, 5)
-    acc3 = BankAccount("John", Currency.USD)
 
     acc1.deposit(1000)
     acc2.deposit(100)
-    acc3.deposit(50)
-
-    acc3.freeze()
 
     queue = TransactionQueue()
     processor = TransactionProcessor()
 
-    # норм
     for _ in range(3):
         queue.add(Transaction(
             TransactionType.TRANSFER, 100, Currency.USD,
             sender=acc1, receiver=acc2, fee=2
         ))
 
-    # минус ошибка
-    queue.add(Transaction(
-        TransactionType.TRANSFER, 2000, Currency.USD,
-        sender=acc1, receiver=acc2, fee=2
-    ))
-
-    # premium минус
-    queue.add(Transaction(
-        TransactionType.TRANSFER, 400, Currency.USD,
-        sender=acc2, receiver=acc1, fee=5
-    ))
-
-    # frozen
-    queue.add(Transaction(
-        TransactionType.TRANSFER, 10, Currency.USD,
-        sender=acc3, receiver=acc1, fee=1
-    ))
-
-    # обработка
     while True:
         item = queue.get_next()
         if not item:
             break
 
         tx = item["transaction"]
-
         processor.process(tx)
 
         if tx.status == TransactionStatus.PENDING:
-            continue  # retry
+            continue
 
         queue.remove(item)
         print(tx)
-
-    print("\n=== LOG ===")
-    for t in processor.log:
-        print(f"{t.id} | {t.status.value} | {t.error}")
-
-    print("\n=== BALANCES ===")
-    print("Timofey:", acc1.get_balance())
-    print("Alex:", acc2.get_balance())
-    print("John:", acc3.get_balance())
 
 
 if __name__ == "__main__":
