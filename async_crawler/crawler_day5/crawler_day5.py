@@ -3,7 +3,10 @@ import aiohttp
 import time
 import json
 
-from typing import Dict, List, Optional, Type
+from typing import Dict
+from typing import List
+from typing import Optional
+
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -22,38 +25,39 @@ class CrawlerError(Exception):
 
 class TransientError(CrawlerError):
     """
-    Временная ошибка
+    Временная ошибка.
 
-    Можно повторять:
-    - 429
-    - 503
+    Повторяем:
     - timeout
+    - 429
+    - 500
+    - 503
     """
     pass
 
 
 class PermanentError(CrawlerError):
     """
-    Постоянная ошибка
+    Постоянная ошибка.
 
-    Повторять нельзя:
-    - 404
-    - 403
+    НЕ повторяем:
     - 401
+    - 403
+    - 404
     """
     pass
 
 
 class NetworkError(TransientError):
     """
-    Сетевые ошибки
+    Сетевые ошибки.
     """
     pass
 
 
 class ParseError(CrawlerError):
     """
-    Ошибки парсинга
+    Ошибки парсинга.
     """
     pass
 
@@ -65,7 +69,7 @@ class ParseError(CrawlerError):
 class CircuitBreaker:
     """
     Блокировка домена при большом
-    количестве ошибок
+    количестве ошибок.
     """
 
     def __init__(
@@ -74,29 +78,49 @@ class CircuitBreaker:
         recovery_timeout: int = 15
     ):
 
-        self.failure_threshold = failure_threshold
+        self.failure_threshold = (
+            failure_threshold
+        )
 
-        self.recovery_timeout = recovery_timeout
+        self.recovery_timeout = (
+            recovery_timeout
+        )
 
         self.failures: Dict[str, int] = {}
 
-        self.blocked_until: Dict[str, float] = {}
+        self.blocked_until: Dict[
+            str,
+            float
+        ] = {}
 
-    def is_blocked(self, domain: str) -> bool:
+    # =====================================================
+    # IS BLOCKED
+    # =====================================================
+
+    def is_blocked(
+        self,
+        domain: str
+    ) -> bool:
 
         if domain not in self.blocked_until:
             return False
 
         current_time = time.time()
 
-        unblock_time = self.blocked_until[domain]
+        unblock_time = (
+            self.blocked_until[domain]
+        )
 
-        # ещё заблокирован
+        # =============================================
+        # STILL BLOCKED
+        # =============================================
 
         if current_time < unblock_time:
             return True
 
-        # разблокируем
+        # =============================================
+        # UNBLOCK
+        # =============================================
 
         del self.blocked_until[domain]
 
@@ -104,26 +128,49 @@ class CircuitBreaker:
 
         return False
 
-    def record_failure(self, domain: str):
+    # =====================================================
+    # RECORD FAILURE
+    # =====================================================
+
+    def record_failure(
+        self,
+        domain: str
+    ):
 
         self.failures[domain] = (
-            self.failures.get(domain, 0) + 1
+
+            self.failures.get(domain, 0)
+
+            + 1
         )
 
         if (
+
             self.failures[domain]
+
             >= self.failure_threshold
         ):
 
             self.blocked_until[domain] = (
-                time.time() + self.recovery_timeout
+
+                time.time()
+
+                + self.recovery_timeout
             )
 
             print(
-                f"🚫 Circuit OPEN for {domain}"
+                f"🚫 Circuit OPEN "
+                f"for {domain}"
             )
 
-    def record_success(self, domain: str):
+    # =====================================================
+    # RECORD SUCCESS
+    # =====================================================
+
+    def record_success(
+        self,
+        domain: str
+    ):
 
         self.failures[domain] = 0
 
@@ -134,7 +181,7 @@ class CircuitBreaker:
 
 class RetryStrategy:
     """
-    Управление retry логикой
+    Retry manager.
     """
 
     def __init__(
@@ -149,18 +196,24 @@ class RetryStrategy:
         self.backoff_factor = backoff_factor
 
         self.retry_on = retry_on or [
+
             TransientError,
+
             NetworkError
         ]
 
-        # =========================================
+        # =============================================
         # STATS
-        # =========================================
+        # =============================================
 
         self.stats = {
+
             "errors_by_type": {},
+
             "successful_retries": 0,
+
             "retry_times": [],
+
             "permanent_errors": []
         }
 
@@ -174,9 +227,14 @@ class RetryStrategy:
         attempt: int
     ) -> float:
 
-        base = self.backoff_factor ** attempt
+        base = (
+            self.backoff_factor
+            ** attempt
+        )
 
-        # 429 → сильнее замедляемся
+        # =============================================
+        # SPECIAL CASES
+        # =============================================
 
         if isinstance(error, TransientError):
 
@@ -207,12 +265,24 @@ class RetryStrategy:
 
             try:
 
+                # =====================================
+                # EXECUTION
+                # =====================================
+
                 result = await coro(
+
                     *args,
+
+                    timeout_multiplier=(
+                        attempt + 1
+                    ),
+
                     **kwargs
                 )
 
-                # success after retry
+                # =====================================
+                # SUCCESS AFTER RETRY
+                # =====================================
 
                 if attempt > 0:
 
@@ -221,7 +291,10 @@ class RetryStrategy:
                     ] += 1
 
                     retry_time = (
-                        time.time() - retry_start
+
+                        time.time()
+
+                        - retry_start
                     )
 
                     self.stats[
@@ -234,22 +307,24 @@ class RetryStrategy:
 
                 error_name = type(e).__name__
 
-                # =================================
+                # =====================================
                 # STATS
-                # =================================
+                # =====================================
 
                 self.stats["errors_by_type"][
                     error_name
                 ] = (
-                    self.stats["errors_by_type"].get(
-                        error_name,
-                        0
-                    ) + 1
+
+                    self.stats[
+                        "errors_by_type"
+                    ].get(error_name, 0)
+
+                    + 1
                 )
 
-                # =================================
+                # =====================================
                 # SHOULD RETRY
-                # =================================
+                # =====================================
 
                 should_retry = any(
 
@@ -258,20 +333,20 @@ class RetryStrategy:
                     for retry_type in self.retry_on
                 )
 
-                # =================================
+                # =====================================
                 # LOGGING
-                # =================================
+                # =====================================
 
                 print(
-                    f"\n❌ ERROR:"
+                    f"\n❌ ERROR"
                     f"\nType: {error_name}"
                     f"\nAttempt: {attempt + 1}"
                     f"\nError: {e}"
                 )
 
-                # =================================
+                # =====================================
                 # NO RETRY
-                # =================================
+                # =====================================
 
                 if not should_retry:
 
@@ -286,9 +361,9 @@ class RetryStrategy:
 
                     raise
 
-                # =================================
+                # =====================================
                 # MAX RETRIES
-                # =================================
+                # =====================================
 
                 if attempt >= self.max_retries:
 
@@ -298,9 +373,9 @@ class RetryStrategy:
 
                     raise
 
-                # =================================
+                # =====================================
                 # BACKOFF
-                # =================================
+                # =====================================
 
                 backoff = self.get_backoff_time(
                     e,
@@ -317,7 +392,7 @@ class RetryStrategy:
                 attempt += 1
 
     # =====================================================
-    # STATS
+    # GET STATS
     # =====================================================
 
     def get_stats(self):
@@ -327,14 +402,24 @@ class RetryStrategy:
         if self.stats["retry_times"]:
 
             avg_retry_time = (
-                sum(self.stats["retry_times"])
+
+                sum(
+                    self.stats["retry_times"]
+                )
+
                 /
-                len(self.stats["retry_times"])
+
+                len(
+                    self.stats["retry_times"]
+                )
             )
 
         return {
+
             **self.stats,
-            "avg_retry_time": avg_retry_time
+
+            "avg_retry_time":
+                avg_retry_time
         }
 
 
@@ -344,7 +429,7 @@ class RetryStrategy:
 
 class HTMLParser:
     """
-    HTML parser
+    HTML parser.
     """
 
     def parse(
@@ -361,20 +446,26 @@ class HTMLParser:
             )
 
             title = (
+
                 soup.title.string.strip()
+
                 if soup.title and soup.title.string
+
                 else ""
             )
 
             return {
+
                 "url": url,
+
                 "title": title
             }
 
         except Exception as e:
 
             raise ParseError(
-                f"Parse error: {url} | {e}"
+                f"Parse error: "
+                f"{url} | {e}"
             )
 
 
@@ -384,7 +475,7 @@ class HTMLParser:
 
 class AsyncCrawler:
     """
-    Production-like crawler
+    Production-like crawler.
     """
 
     def __init__(
@@ -392,24 +483,55 @@ class AsyncCrawler:
         max_concurrent: int = 5
     ):
 
+        # =============================================
+        # SEMAPHORE
+        # =============================================
+
         self.semaphore = asyncio.Semaphore(
             max_concurrent
         )
 
+        # =============================================
+        # PARSER
+        # =============================================
+
         self.parser = HTMLParser()
+
+        # =============================================
+        # SESSION
+        # =============================================
 
         self.session = None
 
+        # =============================================
+        # RETRY STRATEGY
+        # =============================================
+
         self.retry_strategy = RetryStrategy(
+
             max_retries=3,
+
             backoff_factor=2.0,
+
             retry_on=[
+
                 TransientError,
+
                 NetworkError
             ]
         )
 
-        self.circuit_breaker = CircuitBreaker()
+        # =============================================
+        # CIRCUIT BREAKER
+        # =============================================
+
+        self.circuit_breaker = (
+            CircuitBreaker()
+        )
+
+        # =============================================
+        # ERRORS
+        # =============================================
 
         self.errors: List[Dict] = []
 
@@ -417,24 +539,19 @@ class AsyncCrawler:
     # SESSION
     # =====================================================
 
-    async def _get_session(
-        self,
-        timeout_multiplier: int = 1
-    ):
-
-        timeout = aiohttp.ClientTimeout(
-
-            total=10 * timeout_multiplier,
-
-            connect=5 * timeout_multiplier,
-
-            sock_read=5 * timeout_multiplier
-        )
+    async def _get_session(self):
 
         if not self.session:
 
-            self.session = aiohttp.ClientSession(
-                timeout=timeout
+            # =========================================
+            # SESSION WITHOUT TIMEOUT
+            # =========================================
+
+            # timeout будет передаваться
+            # в каждый request отдельно
+
+            self.session = (
+                aiohttp.ClientSession()
             )
 
         return self.session
@@ -453,25 +570,40 @@ class AsyncCrawler:
 
             domain = urlparse(url).netloc
 
-            # =====================================
+            # =========================================
             # CIRCUIT BREAKER
-            # =====================================
+            # =========================================
 
             if self.circuit_breaker.is_blocked(
                 domain
             ):
 
                 raise TransientError(
-                    f"Domain blocked: {domain}"
+                    f"Domain blocked: "
+                    f"{domain}"
                 )
 
             try:
 
-                session = await self._get_session(
-                    timeout_multiplier
+                session = await self._get_session()
+
+                # =====================================
+                # DYNAMIC TIMEOUT
+                # =====================================
+
+                timeout = aiohttp.ClientTimeout(
+
+                    total=10 * timeout_multiplier,
+
+                    connect=5 * timeout_multiplier,
+
+                    sock_read=5 * timeout_multiplier
                 )
 
-                async with session.get(url) as response:
+                async with session.get(
+                    url,
+                    timeout=timeout
+                ) as response:
 
                     status = response.status
 
@@ -479,9 +611,9 @@ class AsyncCrawler:
                         f"🌐 {url} -> {status}"
                     )
 
-                    # =============================
+                    # =================================
                     # SUCCESS
-                    # =============================
+                    # =================================
 
                     if status == 200:
 
@@ -491,9 +623,9 @@ class AsyncCrawler:
 
                         return await response.text()
 
-                    # =============================
+                    # =================================
                     # RETRYABLE
-                    # =============================
+                    # =================================
 
                     if status == 429:
 
@@ -513,18 +645,24 @@ class AsyncCrawler:
                             "500 Internal Server Error"
                         )
 
-                    # =============================
+                    # =================================
                     # PERMANENT
-                    # =============================
+                    # =================================
 
-                    if status in [401, 403, 404]:
+                    if status in [
+                        401,
+                        403,
+                        404
+                    ]:
 
                         raise PermanentError(
-                            f"{status} Permanent error"
+                            f"{status} "
+                            f"Permanent error"
                         )
 
                     raise CrawlerError(
-                        f"Unhandled status: {status}"
+                        f"Unhandled status: "
+                        f"{status}"
                     )
 
             except asyncio.TimeoutError:
@@ -566,9 +704,14 @@ class AsyncCrawler:
 
         try:
 
-            html = await self.retry_strategy.execute_with_retry(
-                self.fetch_url,
-                url
+            html = (
+                await self.retry_strategy
+                .execute_with_retry(
+
+                    self.fetch_url,
+
+                    url
+                )
             )
 
             return self.parser.parse(
@@ -579,13 +722,18 @@ class AsyncCrawler:
         except Exception as e:
 
             self.errors.append({
+
                 "url": url,
+
                 "error": str(e),
+
                 "type": type(e).__name__
             })
 
             return {
+
                 "url": url,
+
                 "error": str(e)
             }
 
@@ -605,10 +753,12 @@ class AsyncCrawler:
             for url in urls
         ]
 
-        return await asyncio.gather(*tasks)
+        return await asyncio.gather(
+            *tasks
+        )
 
     # =====================================================
-    # SAVE REPORT
+    # SAVE ERROR REPORT
     # =====================================================
 
     def save_error_report(
@@ -617,8 +767,12 @@ class AsyncCrawler:
     ):
 
         report = {
-            "errors": self.errors,
-            "stats": self.retry_strategy.get_stats()
+
+            "errors":
+                self.errors,
+
+            "stats":
+                self.retry_strategy.get_stats()
         }
 
         with open(
@@ -628,9 +782,13 @@ class AsyncCrawler:
         ) as f:
 
             json.dump(
+
                 report,
+
                 f,
+
                 indent=2,
+
                 ensure_ascii=False
             )
 
@@ -688,31 +846,33 @@ async def main():
             f"{end - start:.2f} sec"
         )
 
-        # =====================================
+        # =============================================
         # RESULTS
-        # =====================================
+        # =============================================
 
-        print("\n📄 RESULTS:")
+        print("\n📄 RESULTS")
 
         for result in results:
 
             print(result)
 
-        # =====================================
+        # =============================================
         # STATS
-        # =====================================
+        # =============================================
 
-        print("\n📊 RETRY STATS:")
+        print("\n📊 RETRY STATS")
 
-        stats = crawler.retry_strategy.get_stats()
+        stats = (
+            crawler.retry_strategy.get_stats()
+        )
 
         for key, value in stats.items():
 
             print(f"{key}: {value}")
 
-        # =====================================
+        # =============================================
         # SAVE REPORT
-        # =====================================
+        # =============================================
 
         crawler.save_error_report()
 

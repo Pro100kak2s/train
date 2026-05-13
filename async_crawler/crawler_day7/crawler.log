@@ -1,0 +1,46 @@
+2026-05-13 08:58:13,669 | INFO | SUCCESS https://example.com
+2026-05-13 08:58:16,813 | INFO | SUCCESS https://iana.org/domains/example
+2026-05-13 08:58:17,673 | INFO | SUCCESS https://iana.org/domains
+2026-05-13 08:58:18,203 | INFO | SUCCESS https://iana.org/abuse
+2026-05-13 08:58:18,346 | INFO | SUCCESS https://iana.org/contact
+2026-05-13 08:58:18,360 | INFO | SUCCESS https://iana.org/domains/root
+2026-05-13 08:58:18,494 | INFO | SUCCESS https://iana.org/archive
+2026-05-13 08:58:18,501 | INFO | SUCCESS https://iana.org/domains/reserved
+2026-05-13 08:58:18,533 | INFO | SUCCESS https://iana.org/protocols
+2026-05-13 08:58:18,979 | INFO | SUCCESS https://iana.org/about
+2026-05-13 08:58:18,982 | INFO | SUCCESS https://iana.org/time-zones
+2026-05-13 08:58:19,104 | ERROR | ERROR https://www.icann.org/ | 403, message='Forbidden', url='https://www.icann.org/'
+2026-05-13 08:58:19,176 | INFO | SUCCESS https://iana.org/domains/int
+2026-05-13 08:58:19,264 | INFO | SUCCESS https://iana.org/domains/idn-tables
+2026-05-13 08:58:21,058 | INFO | SUCCESS https://www.icann.org/privacy/policy
+2026-05-13 08:58:21,072 | INFO | SUCCESS https://iana.org/numbers
+2026-05-13 08:58:21,076 | INFO | SUCCESS https://iana.org/news
+2026-05-13 08:58:21,114 | INFO | SUCCESS https://iana.org/about/excellence
+2026-05-13 08:58:21,380 | INFO | SUCCESS https://iana.org/go/rfc6761
+2026-05-13 08:58:21,450 | INFO | SUCCESS https://pti.icann.org
+2026-05-13 08:58:21,456 | INFO | SUCCESS https://iana.org/go/rfc2606
+2026-05-13 08:58:22,690 | INFO | SUCCESS https://www.icann.org/privacy/tos
+2026-05-13 08:58:23,184 | ERROR | ERROR https://iana.org/ | Server disconnected
+2026-05-13 08:58:23,246 | ERROR | ERROR https://iana.org/domains/arpa | Server disconnected
+2026-05-13 08:58:23,265 | ERROR | ERROR https://iana.org/performance | Server disconnected
+2026-05-13 09:07:26,629 | INFO | SUCCESS https://example.com
+2026-05-13 09:07:29,617 | INFO | SUCCESS https://iana.org/domains/example
+2026-05-13 09:07:31,339 | INFO | SUCCESS https://iana.org/about/excellence
+2026-05-13 09:07:31,382 | INFO | SUCCESS https://pti.icann.org
+2026-05-13 09:07:31,504 | INFO | SUCCESS https://iana.org/
+2026-05-13 09:07:31,549 | INFO | SUCCESS https://iana.org/domains/root
+2026-05-13 09:07:31,700 | INFO | SUCCESS https://iana.org/performance
+2026-05-13 09:07:31,708 | INFO | SUCCESS https://iana.org/about
+2026-05-13 09:07:31,731 | INFO | SUCCESS https://iana.org/domains/int
+2026-05-13 09:07:31,955 | INFO | SUCCESS https://iana.org/domains
+2026-05-13 09:07:31,973 | INFO | SUCCESS https://iana.org/abuse
+2026-05-13 09:07:32,033 | INFO | SUCCESS https://www.icann.org/privacy/tos
+2026-05-13 09:07:32,192 | INFO | SUCCESS https://iana.org/archive
+2026-05-13 09:07:32,267 | INFO | SUCCESS https://iana.org/news
+2026-05-13 09:07:32,335 | INFO | SUCCESS https://iana.org/numbers
+2026-05-13 09:07:32,421 | INFO | SUCCESS https://iana.org/contact
+2026-05-13 09:07:32,429 | INFO | SUCCESS https://iana.org/go/rfc2606
+2026-05-13 09:07:32,472 | INFO | SUCCESS https://iana.org/go/rfc6761
+2026-05-13 09:07:32,678 | INFO | SUCCESS https://iana.org/protocols
+2026-05-13 09:07:33,111 | INFO | SUCCESS https://www.icann.org/privacy/policy
+2026-05-13 09:07:33,706 | INFO | SUCCESS https://iana.org/domains/idn-tables

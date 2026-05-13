@@ -3,13 +3,19 @@ import aiohttp
 import aiofiles
 import aiosqlite
 
-import csv
 import json
 import time
+import csv
+import io
 
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
+
 from datetime import datetime
-from typing import Dict, List, Optional
+
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from bs4 import BeautifulSoup
 
@@ -20,7 +26,7 @@ from bs4 import BeautifulSoup
 
 class DataStorage(ABC):
     """
-    Абстрактное хранилище данных
+    Абстрактное хранилище данных.
     """
 
     @abstractmethod
@@ -38,13 +44,16 @@ class DataStorage(ABC):
 
 class JSONStorage(DataStorage):
     """
-    Асинхронное сохранение в JSON
+    Асинхронное JSON storage.
+
+    Формат:
+    JSON Lines (1 объект = 1 строка)
     """
 
     def __init__(
         self,
         filename: str,
-        pretty: bool = True
+        pretty: bool = False
     ):
 
         self.filename = filename
@@ -55,7 +64,14 @@ class JSONStorage(DataStorage):
 
         self.items_saved = 0
 
-    async def save(self, data: dict):
+    # =====================================================
+    # SAVE
+    # =====================================================
+
+    async def save(
+        self,
+        data: dict
+    ):
 
         async with self.lock:
 
@@ -67,12 +83,32 @@ class JSONStorage(DataStorage):
                     encoding="utf-8"
                 ) as f:
 
-                    json_line = json.dumps(
-                        data,
-                        ensure_ascii=False
-                    )
+                    # =================================
+                    # JSON SERIALIZE
+                    # =================================
 
-                    await f.write(json_line + "\n")
+                    if self.pretty:
+
+                        json_line = json.dumps(
+                            data,
+                            indent=2,
+                            ensure_ascii=False
+                        )
+
+                    else:
+
+                        json_line = json.dumps(
+                            data,
+                            ensure_ascii=False
+                        )
+
+                    # =================================
+                    # WRITE
+                    # =================================
+
+                    await f.write(
+                        json_line + "\n"
+                    )
 
                     self.items_saved += 1
 
@@ -81,6 +117,10 @@ class JSONStorage(DataStorage):
                 print(
                     f"❌ JSON save error: {e}"
                 )
+
+    # =====================================================
+    # CLOSE
+    # =====================================================
 
     async def close(self):
 
@@ -96,7 +136,7 @@ class JSONStorage(DataStorage):
 
 class CSVStorage(DataStorage):
     """
-    Асинхронное сохранение CSV
+    Асинхронное CSV storage.
     """
 
     def __init__(
@@ -115,11 +155,50 @@ class CSVStorage(DataStorage):
 
         self.items_saved = 0
 
-    async def save(self, data: dict):
+    # =====================================================
+    # SAVE
+    # =====================================================
+
+    async def save(
+        self,
+        data: dict
+    ):
 
         async with self.lock:
 
             try:
+
+                # =====================================
+                # PREPARE ROW
+                # =====================================
+
+                normalized_data = {}
+
+                for key, value in data.items():
+
+                    if isinstance(
+                        value,
+                        (dict, list)
+                    ):
+
+                        value = json.dumps(
+                            value,
+                            ensure_ascii=False
+                        )
+
+                    normalized_data[key] = value
+
+                # =====================================
+                # MEMORY CSV
+                # =====================================
+
+                output = io.StringIO()
+
+                writer = csv.DictWriter(
+                    output,
+                    fieldnames=normalized_data.keys(),
+                    quoting=csv.QUOTE_ALL
+                )
 
                 # =====================================
                 # HEADERS
@@ -127,55 +206,47 @@ class CSVStorage(DataStorage):
 
                 if not self.headers_written:
 
-                    async with aiofiles.open(
-                        self.filename,
-                        mode="w",
-                        encoding=self.encoding
-                    ) as f:
-
-                        headers = ",".join(
-                            data.keys()
-                        )
-
-                        await f.write(
-                            headers + "\n"
-                        )
+                    writer.writeheader()
 
                     self.headers_written = True
 
-                # =====================================
-                # VALUES
-                # =====================================
+                    async with aiofiles.open(
+                        self.filename,
+                        mode="w",
+                        encoding=self.encoding,
+                        newline=""
+                    ) as f:
 
-                values = []
-
-                for value in data.values():
-
-                    if isinstance(value, (dict, list)):
-
-                        value = json.dumps(
-                            value,
-                            ensure_ascii=False
+                        await f.write(
+                            output.getvalue()
                         )
 
-                    value = str(value).replace(
-                        "\n",
-                        " "
+                    output = io.StringIO()
+
+                    writer = csv.DictWriter(
+                        output,
+                        fieldnames=normalized_data.keys(),
+                        quoting=csv.QUOTE_ALL
                     )
 
-                    values.append(
-                        f'"{value}"'
-                    )
+                # =====================================
+                # WRITE ROW
+                # =====================================
 
-                row = ",".join(values)
+                writer.writerow(
+                    normalized_data
+                )
 
                 async with aiofiles.open(
                     self.filename,
                     mode="a",
-                    encoding=self.encoding
+                    encoding=self.encoding,
+                    newline=""
                 ) as f:
 
-                    await f.write(row + "\n")
+                    await f.write(
+                        output.getvalue()
+                    )
 
                 self.items_saved += 1
 
@@ -184,6 +255,10 @@ class CSVStorage(DataStorage):
                 print(
                     f"❌ CSV save error: {e}"
                 )
+
+    # =====================================================
+    # CLOSE
+    # =====================================================
 
     async def close(self):
 
@@ -199,12 +274,13 @@ class CSVStorage(DataStorage):
 
 class SQLiteStorage(DataStorage):
     """
-    Асинхронное SQLite хранилище
+    Асинхронное SQLite storage.
     """
 
     def __init__(
         self,
-        db_path: str
+        db_path: str,
+        batch_size: int = 5
     ):
 
         self.db_path = db_path
@@ -215,7 +291,9 @@ class SQLiteStorage(DataStorage):
 
         self.batch = []
 
-        self.batch_size = 5
+        self.batch_size = batch_size
+
+        self.lock = asyncio.Lock()
 
     # =====================================================
     # INIT DB
@@ -227,6 +305,22 @@ class SQLiteStorage(DataStorage):
             self.db_path
         )
 
+        # =============================================
+        # PERFORMANCE
+        # =============================================
+
+        await self.db.execute(
+            "PRAGMA journal_mode=WAL"
+        )
+
+        await self.db.execute(
+            "PRAGMA synchronous=NORMAL"
+        )
+
+        # =============================================
+        # TABLE
+        # =============================================
+
         await self.db.execute("""
 
             CREATE TABLE IF NOT EXISTS pages (
@@ -234,10 +328,13 @@ class SQLiteStorage(DataStorage):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
 
                 url TEXT,
+
                 title TEXT,
+
                 text TEXT,
 
                 links TEXT,
+
                 metadata TEXT,
 
                 crawled_at TEXT,
@@ -267,25 +364,30 @@ class SQLiteStorage(DataStorage):
     # SAVE
     # =====================================================
 
-    async def save(self, data: dict):
+    async def save(
+        self,
+        data: dict
+    ):
 
-        try:
+        async with self.lock:
 
-            self.batch.append(data)
+            try:
 
-            # =========================================
-            # BATCH INSERT
-            # =========================================
+                self.batch.append(data)
 
-            if len(self.batch) >= self.batch_size:
+                # =====================================
+                # AUTO FLUSH
+                # =====================================
 
-                await self.flush()
+                if len(self.batch) >= self.batch_size:
 
-        except Exception as e:
+                    await self.flush()
 
-            print(
-                f"❌ SQLite save error: {e}"
-            )
+            except Exception as e:
+
+                print(
+                    f"❌ SQLite save error: {e}"
+                )
 
     # =====================================================
     # FLUSH
@@ -303,14 +405,10 @@ class SQLiteStorage(DataStorage):
                 url,
                 title,
                 text,
-
                 links,
                 metadata,
-
                 crawled_at,
-
                 status_code,
-
                 content_type
 
             )
@@ -361,7 +459,7 @@ class SQLiteStorage(DataStorage):
         self.batch.clear()
 
     # =====================================================
-    # READ DATA
+    # READ ALL
     # =====================================================
 
     async def read_all(self):
@@ -380,11 +478,13 @@ class SQLiteStorage(DataStorage):
 
     async def close(self):
 
-        await self.flush()
+        async with self.lock:
 
-        if self.db:
+            await self.flush()
 
-            await self.db.close()
+            if self.db:
+
+                await self.db.close()
 
         print(
             f"✅ SQLite saved: "
@@ -398,7 +498,7 @@ class SQLiteStorage(DataStorage):
 
 class HTMLParser:
     """
-    HTML parser
+    HTML parser.
     """
 
     def parse(
@@ -416,16 +516,31 @@ class HTMLParser:
                 "lxml"
             )
 
+            # =========================================
+            # TITLE
+            # =========================================
+
             title = (
+
                 soup.title.string.strip()
+
                 if soup.title and soup.title.string
+
                 else ""
             )
+
+            # =========================================
+            # TEXT
+            # =========================================
 
             text = soup.get_text(
                 separator=" ",
                 strip=True
             )
+
+            # =========================================
+            # LINKS
+            # =========================================
 
             links = [
 
@@ -437,13 +552,20 @@ class HTMLParser:
                 )
             ]
 
+            # =========================================
+            # METADATA
+            # =========================================
+
             metadata = {}
 
             for meta in soup.find_all("meta"):
 
                 name = (
+
                     meta.get("name")
+
                     or
+
                     meta.get("property")
                 )
 
@@ -481,7 +603,9 @@ class HTMLParser:
             )
 
             return {
+
                 "url": url,
+
                 "error": str(e)
             }
 
@@ -492,7 +616,7 @@ class HTMLParser:
 
 class AsyncCrawler:
     """
-    Async crawler with storage
+    Async crawler with storage.
     """
 
     def __init__(
@@ -553,8 +677,11 @@ class AsyncCrawler:
                     html = await resp.text()
 
                     return {
+
                         "html": html,
+
                         "status": resp.status,
+
                         "content_type": resp.headers.get(
                             "Content-Type",
                             ""
@@ -585,6 +712,10 @@ class AsyncCrawler:
 
         if not result:
             return
+
+        # =============================================
+        # PARSE
+        # =============================================
 
         data = self.parser.parse(
 
@@ -645,7 +776,7 @@ class AsyncCrawler:
 
 
 # =========================================================
-# DEMO
+# DEMO JSON
 # =========================================================
 
 async def demo_json():
@@ -672,6 +803,10 @@ async def demo_json():
     await crawler.close()
 
 
+# =========================================================
+# DEMO CSV
+# =========================================================
+
 async def demo_csv():
 
     print("\n📄 CSV STORAGE DEMO")
@@ -695,6 +830,10 @@ async def demo_csv():
 
     await crawler.close()
 
+
+# =========================================================
+# DEMO SQLITE
+# =========================================================
 
 async def demo_sqlite():
 
@@ -723,7 +862,7 @@ async def demo_sqlite():
 
     rows = await storage.read_all()
 
-    print("\n📊 SQLITE DATA:")
+    print("\n📊 SQLITE DATA")
 
     for row in rows:
 

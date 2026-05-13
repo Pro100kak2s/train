@@ -2,26 +2,64 @@ import asyncio
 import aiohttp
 import time
 
-from typing import Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse, urljoin
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Set
+
+from urllib.parse import urlparse
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 
-# ==========================================
+# =========================================================
 # QUEUE
-# ==========================================
+# =========================================================
 
 class CrawlerQueue:
+    """
+    Очередь crawler.
+
+    Хранит:
+    - URL для обработки
+    - visited ссылки
+    - ошибки
+    - обработанные страницы
+    """
+
     def __init__(self):
+
+        # =============================================
+        # PRIORITY QUEUE
+        # =============================================
+
+        # Формат:
+        # (priority, depth, url)
 
         self.queue = asyncio.PriorityQueue()
 
+        # =============================================
+        # VISITED URLS
+        # =============================================
+
         self.visited: Set[str] = set()
+
+        # =============================================
+        # FAILED URLS
+        # =============================================
 
         self.failed: Dict[str, str] = {}
 
+        # =============================================
+        # PROCESSED DATA
+        # =============================================
+
         self.processed: Dict[str, dict] = {}
+
+    # =====================================================
+    # ADD URL
+    # =====================================================
 
     def add_url(
         self,
@@ -29,92 +67,177 @@ class CrawlerQueue:
         priority: int = 0,
         depth: int = 0
     ):
+        """
+        Добавление URL в очередь.
+        """
+
+        # =============================================
+        # SKIP DUPLICATES
+        # =============================================
 
         if url in self.visited:
             return
+
+        # =============================================
+        # MARK VISITED
+        # =============================================
+
+        self.visited.add(url)
+
+        # =============================================
+        # ADD TO QUEUE
+        # =============================================
 
         self.queue.put_nowait(
             (priority, depth, url)
         )
 
-        self.visited.add(url)
+    # =====================================================
+    # GET NEXT ITEM
+    # =====================================================
 
-    # ==========================================
-    # INTERNAL API
-    # ==========================================
+    async def get_next_item(self):
+        """
+        Получение следующего элемента.
 
-    async def get_next_item(
-        self
-    ) -> Optional[Tuple[int, int, str]]:
-
-        if self.queue.empty():
-            return None
+        ВАЖНО:
+        НЕ используем queue.empty()
+        чтобы избежать race condition.
+        """
 
         return await self.queue.get()
 
-    # ==========================================
-    # PUBLIC API
-    # ==========================================
+    # =====================================================
+    # TASK DONE
+    # =====================================================
 
-    async def get_next(self) -> Optional[str]:
+    def task_done(self):
+        """
+        Сообщаем queue,
+        что задача завершена.
+        """
 
-        item = await self.get_next_item()
+        self.queue.task_done()
 
-        if not item:
-            return None
+    # =====================================================
+    # WAIT ALL TASKS
+    # =====================================================
 
-        _, _, url = item
+    async def join(self):
+        """
+        Ждём завершения всех задач.
+        """
 
-        return url
+        await self.queue.join()
+
+    # =====================================================
+    # MARK PROCESSED
+    # =====================================================
 
     def mark_processed(
         self,
         url: str,
         data: dict
     ):
+        """
+        Помечаем URL как успешно обработанный.
+        """
 
         self.processed[url] = data
+
+    # =====================================================
+    # MARK FAILED
+    # =====================================================
 
     def mark_failed(
         self,
         url: str,
         error: str
     ):
+        """
+        Сохраняем ошибку.
+        """
 
         self.failed[url] = error
 
+    # =====================================================
+    # STATS
+    # =====================================================
+
     def get_stats(self):
+        """
+        Статистика crawler.
+        """
 
         return {
-            "queue_size": self.queue.qsize(),
-            "processed": len(self.processed),
-            "failed": len(self.failed),
-            "visited": len(self.visited),
+
+            "queue_size":
+                self.queue.qsize(),
+
+            "processed":
+                len(self.processed),
+
+            "failed":
+                len(self.failed),
+
+            "visited":
+                len(self.visited),
         }
 
 
-# ==========================================
+# =========================================================
 # SEMAPHORE MANAGER
-# ==========================================
+# =========================================================
 
 class SemaphoreManager:
+    """
+    Ограничение параллелизма.
+
+    Поддерживает:
+    - global limit
+    - per-domain limit
+    """
+
     def __init__(
         self,
         global_limit: int = 10,
         per_domain_limit: int = 3
     ):
 
+        # =============================================
+        # GLOBAL LIMIT
+        # =============================================
+
         self.global_semaphore = asyncio.Semaphore(
             global_limit
         )
 
+        # =============================================
+        # PER DOMAIN LIMIT
+        # =============================================
+
         self.per_domain_limit = per_domain_limit
+
+        # =============================================
+        # DOMAIN SEMAPHORES
+        # =============================================
 
         self.domain_semaphores = {}
 
-    def _get_domain(self, url: str):
+    # =====================================================
+    # GET DOMAIN
+    # =====================================================
+
+    def _get_domain(
+        self,
+        url: str
+    ):
 
         return urlparse(url).netloc
+
+    # =====================================================
+    # GET DOMAIN SEMAPHORE
+    # =====================================================
 
     def _get_domain_semaphore(
         self,
@@ -131,12 +254,24 @@ class SemaphoreManager:
 
         return self.domain_semaphores[domain]
 
-    async def acquire(self, url: str):
+    # =====================================================
+    # ACQUIRE
+    # =====================================================
+
+    async def acquire(
+        self,
+        url: str
+    ):
+        """
+        Захватываем:
+        - global semaphore
+        - domain semaphore
+        """
 
         domain = self._get_domain(url)
 
-        domain_sem = self._get_domain_semaphore(
-            domain
+        domain_sem = (
+            self._get_domain_semaphore(domain)
         )
 
         await self.global_semaphore.acquire()
@@ -145,67 +280,135 @@ class SemaphoreManager:
 
         return domain_sem
 
-    def release(self, domain_sem):
+    # =====================================================
+    # RELEASE
+    # =====================================================
+
+    def release(
+        self,
+        domain_sem
+    ):
+        """
+        Освобождаем semaphore.
+        """
 
         domain_sem.release()
 
         self.global_semaphore.release()
 
 
-# ==========================================
+# =========================================================
 # HTML PARSER
-# ==========================================
+# =========================================================
 
 class HTMLParser:
+    """
+    HTML parser.
+    """
+
     def parse(
         self,
         html: str,
         base_url: str
     ) -> dict:
 
-        soup = BeautifulSoup(html, "lxml")
+        # =============================================
+        # PARSE HTML
+        # =============================================
+
+        soup = BeautifulSoup(
+            html,
+            "lxml"
+        )
+
+        # =============================================
+        # TITLE
+        # =============================================
 
         title = (
+
             soup.title.string.strip()
+
             if soup.title and soup.title.string
+
             else ""
         )
 
+        # =============================================
+        # LINKS
+        # =============================================
+
         links = [
 
-            urljoin(base_url, a.get("href"))
+            urljoin(
+                base_url,
+                a.get("href")
+            )
 
-            for a in soup.find_all("a", href=True)
+            for a in soup.find_all(
+                "a",
+                href=True
+            )
         ]
 
         return {
+
             "title": title,
+
             "links": list(set(links))
         }
 
 
-# ==========================================
+# =========================================================
 # ASYNC CRAWLER
-# ==========================================
+# =========================================================
 
 class AsyncCrawler:
+    """
+    Асинхронный crawler.
+    """
+
     def __init__(
         self,
         max_concurrent=10,
         max_depth=2
     ):
 
+        # =============================================
+        # SESSION
+        # =============================================
+
         self.session = None
 
+        # =============================================
+        # QUEUE
+        # =============================================
+
         self.queue = CrawlerQueue()
+
+        # =============================================
+        # SEMAPHORE
+        # =============================================
 
         self.sem = SemaphoreManager(
             global_limit=max_concurrent
         )
 
+        # =============================================
+        # PARSER
+        # =============================================
+
         self.parser = HTMLParser()
 
+        # =============================================
+        # MAX DEPTH
+        # =============================================
+
         self.max_depth = max_depth
+
+    # =====================================================
+    # SESSION
+    # =====================================================
 
     async def _get_session(self):
 
@@ -221,9 +424,9 @@ class AsyncCrawler:
 
         return self.session
 
-    # ==========================================
+    # =====================================================
     # FILTERS
-    # ==========================================
+    # =====================================================
 
     def _should_visit(
         self,
@@ -231,6 +434,13 @@ class AsyncCrawler:
         include_patterns: Optional[List[str]],
         exclude_patterns: Optional[List[str]],
     ) -> bool:
+        """
+        Проверка URL фильтров.
+        """
+
+        # =============================================
+        # EXCLUDE
+        # =============================================
 
         if exclude_patterns:
 
@@ -239,19 +449,32 @@ class AsyncCrawler:
                 if pattern in url:
                     return False
 
+        # =============================================
+        # INCLUDE
+        # =============================================
+
         if include_patterns:
 
             return any(
+
                 pattern in url
+
                 for pattern in include_patterns
             )
 
         return True
 
+    # =====================================================
+    # FETCH
+    # =====================================================
+
     async def fetch(
         self,
         url: str
     ) -> Optional[str]:
+        """
+        HTTP request.
+        """
 
         domain_sem = await self.sem.acquire(url)
 
@@ -278,6 +501,10 @@ class AsyncCrawler:
 
             self.sem.release(domain_sem)
 
+    # =====================================================
+    # WORKER
+    # =====================================================
+
     async def worker(
         self,
         max_pages: int,
@@ -285,57 +512,122 @@ class AsyncCrawler:
         include_patterns: Optional[List[str]],
         exclude_patterns: Optional[List[str]],
     ):
+        """
+        Worker обработки URL.
+        """
 
         while True:
 
-            if len(self.queue.processed) >= max_pages:
-                return
+            # =========================================
+            # WAIT NEXT TASK
+            # =========================================
 
             item = await self.queue.get_next_item()
 
-            if not item:
-                return
-
             priority, depth, url = item
 
-            html = await self.fetch(url)
+            # =========================================
+            # POISON PILL
+            # =========================================
 
-            if not html:
-                continue
+            if url is None:
 
-            data = self.parser.parse(html, url)
+                self.queue.task_done()
 
-            self.queue.mark_processed(url, data)
+                return
 
-            if depth >= self.max_depth:
-                continue
+            try:
 
-            for link in data["links"]:
+                # =====================================
+                # MAX PAGES
+                # =====================================
 
-                # same domain filter
-
-                if same_domain_only:
-
-                    if (
-                        urlparse(link).netloc
-                        != urlparse(url).netloc
-                    ):
-                        continue
-
-                # include/exclude filter
-
-                if not self._should_visit(
-                    link,
-                    include_patterns,
-                    exclude_patterns
+                if (
+                    len(self.queue.processed)
+                    >= max_pages
                 ):
                     continue
 
-                self.queue.add_url(
-                    link,
-                    priority=depth + 1,
-                    depth=depth + 1
+                # =====================================
+                # FETCH
+                # =====================================
+
+                html = await self.fetch(url)
+
+                if not html:
+                    continue
+
+                # =====================================
+                # PARSE
+                # =====================================
+
+                data = self.parser.parse(
+                    html,
+                    url
                 )
+
+                self.queue.mark_processed(
+                    url,
+                    data
+                )
+
+                # =====================================
+                # MAX DEPTH
+                # =====================================
+
+                if depth >= self.max_depth:
+                    continue
+
+                # =====================================
+                # NEW LINKS
+                # =====================================
+
+                for link in data["links"]:
+
+                    # ================================
+                    # SAME DOMAIN FILTER
+                    # ================================
+
+                    if same_domain_only:
+
+                        if (
+
+                            urlparse(link).netloc
+
+                            !=
+
+                            urlparse(url).netloc
+                        ):
+                            continue
+
+                    # ================================
+                    # INCLUDE/EXCLUDE FILTERS
+                    # ================================
+
+                    if not self._should_visit(
+                        link,
+                        include_patterns,
+                        exclude_patterns
+                    ):
+                        continue
+
+                    self.queue.add_url(
+                        link,
+                        priority=depth + 1,
+                        depth=depth + 1
+                    )
+
+            finally:
+
+                # =====================================
+                # TASK DONE
+                # =====================================
+
+                self.queue.task_done()
+
+    # =====================================================
+    # CRAWL
+    # =====================================================
 
     async def crawl(
         self,
@@ -345,6 +637,13 @@ class AsyncCrawler:
         include_patterns: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
     ):
+        """
+        Главный метод crawler.
+        """
+
+        # =============================================
+        # ADD START URLS
+        # =============================================
 
         for url in start_urls:
 
@@ -354,15 +653,21 @@ class AsyncCrawler:
                 depth=0
             )
 
+        # =============================================
+        # CREATE WORKERS
+        # =============================================
+
         workers = [
 
             asyncio.create_task(
+
                 self.worker(
                     max_pages,
                     same_domain_only,
                     include_patterns,
                     exclude_patterns
                 )
+
             )
 
             for _ in range(5)
@@ -370,35 +675,82 @@ class AsyncCrawler:
 
         start = time.time()
 
-        while any(not w.done() for w in workers):
+        # =============================================
+        # STATS MONITOR
+        # =============================================
 
-            stats = self.queue.get_stats()
+        async def stats_monitor():
 
-            print(
-                f"📊 processed={stats['processed']} "
-                f"queue={stats['queue_size']} "
-                f"failed={stats['failed']}"
+            while True:
+
+                stats = self.queue.get_stats()
+
+                print(
+
+                    f"📊 "
+
+                    f"processed={stats['processed']} "
+
+                    f"queue={stats['queue_size']} "
+
+                    f"failed={stats['failed']}"
+                )
+
+                await asyncio.sleep(1)
+
+        monitor = asyncio.create_task(
+            stats_monitor()
+        )
+
+        # =============================================
+        # WAIT ALL TASKS
+        # =============================================
+
+        await self.queue.join()
+
+        # =============================================
+        # STOP WORKERS
+        # =============================================
+
+        for _ in workers:
+
+            self.queue.queue.put_nowait(
+                (
+                    float("inf"),
+                    float("inf"),
+                    None
+                )
             )
-
-            await asyncio.sleep(1)
 
         await asyncio.gather(*workers)
 
+        monitor.cancel()
+
         end = time.time()
 
-        print(f"⏱️ {end - start:.2f} sec")
+        print(
+            f"\n⏱️ {end - start:.2f} sec"
+        )
 
         return self.queue.processed
 
+    # =====================================================
+    # CLOSE
+    # =====================================================
+
     async def close(self):
+        """
+        Закрытие session.
+        """
 
         if self.session:
+
             await self.session.close()
 
 
-# ==========================================
+# =========================================================
 # DEMO
-# ==========================================
+# =========================================================
 
 async def main():
 
@@ -407,31 +759,43 @@ async def main():
         max_depth=2
     )
 
-    results = await crawler.crawl(
+    try:
 
-        start_urls=[
-            "https://httpbin.org/links/5/0"
-        ],
+        results = await crawler.crawl(
 
-        max_pages=20,
+            start_urls=[
+                "https://httpbin.org/links/5/0"
+            ],
 
-        same_domain_only=True,
+            max_pages=20,
 
-        include_patterns=[
-            "httpbin"
-        ],
+            same_domain_only=True,
 
-        exclude_patterns=[
-            "image",
-            "css",
-            "js"
-        ]
-    )
+            include_patterns=[
+                "httpbin"
+            ],
 
-    print(f"\n✅ Итог: {len(results)} страниц")
+            exclude_patterns=[
+                "image",
+                "css",
+                "js"
+            ]
+        )
 
-    await crawler.close()
+        print(
+            f"\n✅ Итог: "
+            f"{len(results)} страниц"
+        )
 
+    finally:
+
+        await crawler.close()
+
+
+# =========================================================
+# ENTRYPOINT
+# =========================================================
 
 if __name__ == "__main__":
+
     asyncio.run(main())

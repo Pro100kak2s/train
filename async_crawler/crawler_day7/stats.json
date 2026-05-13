@@ -1,0 +1,16 @@
+{
+  "total_pages": 21,
+  "successful": 21,
+  "failed": 0,
+  "speed": 2.12,
+  "status_codes": {
+    "200": 21
+  },
+  "top_domains": {
+    "iana.org": 17,
+    "www.icann.org": 2,
+    "example.com": 1,
+    "pti.icann.org": 1
+  },
+  "elapsed": 9.91
+}

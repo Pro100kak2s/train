@@ -1,0 +1,36 @@
+{
+  "errors": [
+    {
+      "url": "https://httpbin.org/status/404",
+      "error": "404 Permanent error",
+      "type": "PermanentError"
+    },
+    {
+      "url": "https://httpbin.org/status/503",
+      "error": "Domain blocked: httpbin.org",
+      "type": "TransientError"
+    },
+    {
+      "url": "https://httpbin.org/status/429",
+      "error": "Domain blocked: httpbin.org",
+      "type": "TransientError"
+    },
+    {
+      "url": "https://httpbin.org/delay/15",
+      "error": "Domain blocked: httpbin.org",
+      "type": "TransientError"
+    }
+  ],
+  "stats": {
+    "errors_by_type": {
+      "TransientError": 12,
+      "PermanentError": 1
+    },
+    "successful_retries": 0,
+    "retry_times": [],
+    "permanent_errors": [
+      "404 Permanent error"
+    ],
+    "avg_retry_time": 0
+  }
+}

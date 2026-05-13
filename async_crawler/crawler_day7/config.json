@@ -1,0 +1,12 @@
+{
+  "max_concurrent": 10,
+  "max_pages": 100,
+  "max_depth": 2,
+  "rate_limit": 0.5,
+  "respect_robots": true,
+  "start_urls": [
+    "https://example.com"
+  ],
+  "output_file": "results.json",
+  "log_file": "crawler.log"
+}
