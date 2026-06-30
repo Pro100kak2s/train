@@ -1,0 +1,47 @@
+[
+    {
+        "timestamp": "2026-06-23 18:18:37",
+        "model_type": "logreg",
+        "hyperparameters": {},
+        "metrics": {
+            "accuracy": 0.7875,
+            "f1": 0.0449
+        }
+    },
+    {
+        "timestamp": "2026-06-23 18:18:38",
+        "model_type": "logreg",
+        "hyperparameters": {},
+        "metrics": {
+            "accuracy": 0.7875,
+            "f1": 0.0449
+        }
+    },
+    {
+        "timestamp": "2026-06-23 18:18:38",
+        "model_type": "logreg",
+        "hyperparameters": {},
+        "metrics": {
+            "accuracy": 0.7875,
+            "f1": 0.0449
+        }
+    },
+    {
+        "timestamp": "2026-06-23 18:18:38",
+        "model_type": "logreg",
+        "hyperparameters": {},
+        "metrics": {
+            "accuracy": 0.7875,
+            "f1": 0.0449
+        }
+    },
+    {
+        "timestamp": "2026-06-24 13:29:45",
+        "model_type": "logreg",
+        "hyperparameters": {},
+        "metrics": {
+            "accuracy": 0.7875,
+            "f1": 0.0449
+        }
+    }
+]
