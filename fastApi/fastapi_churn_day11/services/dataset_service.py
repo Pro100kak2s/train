@@ -108,8 +108,9 @@ class DatasetService:
             {
                 "model": self.model,
                 "model_type": self.model_type,
-                "hyperparameters":
-                    self.model_hyperparameters
+                "hyperparameters": self.model_hyperparameters,
+                "last_metrics": self.last_metrics,
+                "last_trained_at": self.last_trained_at
             },
             "models/churn_model.joblib"
         )
@@ -171,17 +172,23 @@ class DatasetService:
         saved_data = joblib.load(
             model_path
         )
-        self.model = (
-            saved_data["model"]
-        )
+        self.model = saved_data["model"]
 
-        self.model_type = (
-            saved_data["model_type"]
-        )
+        self.model_type = saved_data["model_type"]
 
         self.model_hyperparameters = (
             saved_data["hyperparameters"]
         )
+
+        self.last_metrics = (
+            saved_data.get("last_metrics")
+        )
+
+        self.last_trained_at = (
+            saved_data.get("last_trained_at")
+        )
+
+        return True
 
         return True
 

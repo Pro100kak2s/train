@@ -10,9 +10,9 @@ from fastapi.exceptions import (
     RequestValidationError
 )
 
-from services.dataset_service import DatasetService
+from fastApi.fastapi_churn_day14.services.dataset_service import DatasetService
 
-from models.schemas import (
+from fastApi.fastapi_churn_day14.models import (
     FeatureVectorChurn,
     PredictionResponseChurn,
     TrainingConfigChurn,
